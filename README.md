@@ -37,8 +37,16 @@ flowchart TD
     class C critic
 ```
 
-The same topology can be regenerated straight from the compiled graph with
-`uv run --frozen python scripts/export_graph.py` (see [Graph export](#graph-export)).
+The diagram above is hand-annotated with the routing conditions. The image below is rendered
+directly from the compiled `StateGraph`, so it is exactly what LangGraph executes (dashed
+arrows are conditional edges):
+
+<p align="center">
+  <img src="docs/swarm_architecture.png" alt="Compiled LangGraph topology: start, architect, backend, frontend, critic, end, with conditional edges from backend and critic" width="300">
+</p>
+
+Regenerate it with `uv run --frozen python scripts/export_graph.py --output-dir docs`
+(see [Graph export](#graph-export)).
 
 | Node | Role | Default model | Output |
 |---|---|---|---|
@@ -173,7 +181,11 @@ keys are needed) and writes:
 ```bash
 uv run --frozen python scripts/export_graph.py                   # both artifacts
 uv run --frozen python scripts/export_graph.py --mermaid-only    # offline, .mmd only
+uv run --frozen python scripts/export_graph.py --output-dir docs # refresh the committed copy
 ```
+
+A copy of both files is committed in `docs/` and embedded above. Refresh it whenever the graph
+topology changes.
 
 PNG rendering goes through the public mermaid.ink API, so it needs network access and sends
 the diagram source (node names only, no code or secrets) to that service. Use
