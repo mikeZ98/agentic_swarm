@@ -192,6 +192,40 @@ the diagram source (node names only, no code or secrets) to that service. Use
 `--mermaid-only` to stay fully offline. The pyppeteer renderer is deliberately not used,
 because it downloads Chromium into the home directory.
 
+## Secrets and SSD isolation
+
+API keys live in exactly **one** place: `.env` at the project root, on the external SSD.
+
+| Key | Needed when | Where to get it |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | any role uses `anthropic` (default: architect, backend, frontend) | console.anthropic.com → API keys |
+| `OPENAI_API_KEY` | any role uses `openai` (default: critic) | platform.openai.com → API keys |
+| `OPENROUTER_API_KEY` | any role uses `openrouter` | openrouter.ai → Keys |
+| `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` | you want tracing | Langfuse project → Settings → API keys |
+
+```bash
+cp .env.example .env && chmod 600 .env    # owner-only permissions
+git check-ignore -v .env                  # must print the .gitignore rule
+```
+
+Why this setup:
+
+- **Not in git history.** `.gitignore` excludes `.env` and `.env.*` (only `.env.example`
+  is tracked), plus `*.pem` and `*.key`. Before pushing, `git ls-files | grep -E '\.env$'`
+  must print nothing.
+- **Not on the internal disk.** Keys are never exported from `~/.zshrc`, `~/.zprofile` or the
+  macOS Keychain. direnv (`dotenv_if_exists .env`) and pydantic-settings load them only while
+  you are inside this directory, and direnv unloads them when you `cd` out. The SDKs used here
+  (Anthropic, OpenAI, Langfuse) keep keys in process memory only and don't write them to disk.
+- **Not in caches or logs.** Keys are typed as `SecretStr`, so they print as `**********`
+  in reprs and logs. Every cache (uv, HF, torch, XDG, tiktoken, ruff, mypy, pytest, npm and
+  `TMPDIR`) is pinned under `./.cache/` on the SSD.
+- **Not in traces.** Langfuse records prompts, completions, model parameters, token usage and
+  latency. Keys are passed to the SDK clients as `SecretStr` credentials, not as part of any
+  prompt, so they aren't sent to Langfuse. Before a demo, check one trace to confirm this.
+- **If a key leaks:** rotate it in the provider console first, then clean up.
+  Rewriting git history does not un-leak a key that was already pushed.
+
 ## Configuration reference
 
 | Variable | Default | Purpose |

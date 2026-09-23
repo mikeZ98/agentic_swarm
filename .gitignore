@@ -1,6 +1,10 @@
-# Environments & secrets
+# Environments & secrets (only the template is tracked)
 .venv/
 .env
+.env.*
+!.env.example
+*.pem
+*.key
 .direnv/
 
 # All project-local caches (uv, HF, torch, XDG, ruff, mypy, pytest)
@@ -18,3 +22,7 @@ output/
 .DS_Store
 .idea/
 .vscode/
+
+# Private interview notes (rendered locally, never pushed)
+SWARM_INTERVIEW_PLAYBOOK.md
+SWARM_INTERVIEW_PLAYBOOK.pdf
