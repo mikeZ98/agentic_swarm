@@ -57,7 +57,7 @@ python_version = "3.13"
 strict = true
 cache_dir = ".cache/mypy"
 plugins = ["pydantic.mypy"]
-files = ["src", "tests"]
+files = ["src", "tests", "scripts"]
 warn_unreachable = true
 
 [tool.pydantic-mypy]

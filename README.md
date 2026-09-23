@@ -14,28 +14,31 @@ It passes `ruff check`, `ruff format` and `mypy --strict`, and the test suite ru
 
 ```mermaid
 flowchart TD
-    START([START]) --> A
+    START([Start]) --> A
 
-    subgraph Swarm["SwarmState (Pydantic v2)"]
-        A["🧭 Architect<br/><sub>Claude · structured ArchitectureSpec</sub>"]
-        B["🐍 Backend Engineer<br/><sub>FastAPI / asyncio · Ollama fallback</sub>"]
-        F["🎨 Frontend Engineer<br/><sub>HTML · Tailwind · vanilla JS</sub>"]
-        C{"🛡️ Pan Maruda<br/><sub>GPT-4o red-team critic<br/>EvaluationResult contract</sub>"}
+    subgraph Swarm["Shared SwarmState (Pydantic v2)"]
+        A["Architect<br/><sub>Claude: produces a structured ArchitectureSpec</sub>"]
+        B["Backend Engineer<br/><sub>FastAPI and asyncio, local Ollama fallback</sub>"]
+        F["Frontend Engineer<br/><sub>HTML, Tailwind and vanilla JavaScript</sub>"]
+        C{"Adversarial Critic<br/><sub>GPT-4o red-team review<br/>validated against EvaluationResult</sub>"}
     end
 
-    A --> B
-    B -- "initial pass / fix owner = both" --> F
-    B -- "fix owner = backend" --> C
-    F --> C
+    A -- "specification ready" --> B
+    B -- "initial pass, or fix owner is both" --> F
+    B -- "fix owner is backend only" --> C
+    F -- "frontend ready" --> C
 
-    C -- "accepted ∧ score ≥ threshold" --> END([END])
-    C -- "rejected ∧ iteration ≥ 3" --> END
-    C -- "rejected ∧ iteration < 3<br/>owner ∈ {backend, both}<br/>iteration += 1" --> B
-    C -- "rejected ∧ iteration < 3<br/>owner = frontend<br/>iteration += 1" --> F
+    C -- "accepted and score at or above threshold" --> END([End])
+    C -- "rejected and iteration limit of 3 reached" --> END
+    C -- "rejected and iteration below 3<br/>fix owner is backend or both<br/>increment iteration" --> B
+    C -- "rejected and iteration below 3<br/>fix owner is frontend<br/>increment iteration" --> F
 
     classDef critic fill:#fde2e2,stroke:#c0392b,color:#000
     class C critic
 ```
+
+The same topology can be regenerated straight from the compiled graph with
+`uv run --frozen python scripts/export_graph.py` (see [Graph export](#graph-export)).
 
 | Node | Role | Default model | Output |
 |---|---|---|---|
@@ -158,6 +161,24 @@ Tracing turns on automatically when `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_K
   and **latency**, and revision passes appear as repeated node spans.
 - End-to-end wall-clock latency is also logged by the CLI. Traces are flushed before the process
   exits.
+
+## Graph export
+
+`scripts/export_graph.py` compiles the real `StateGraph` (with placeholder nodes, so no API
+keys are needed) and writes:
+
+- `output/swarm_architecture.mmd`: Mermaid source from `graph.get_graph().draw_mermaid()`
+- `output/swarm_architecture.png`: rendered with `graph.get_graph().draw_mermaid_png()`
+
+```bash
+uv run --frozen python scripts/export_graph.py                   # both artifacts
+uv run --frozen python scripts/export_graph.py --mermaid-only    # offline, .mmd only
+```
+
+PNG rendering goes through the public mermaid.ink API, so it needs network access and sends
+the diagram source (node names only, no code or secrets) to that service. Use
+`--mermaid-only` to stay fully offline. The pyppeteer renderer is deliberately not used,
+because it downloads Chromium into the home directory.
 
 ## Configuration reference
 

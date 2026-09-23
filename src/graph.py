@@ -14,6 +14,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from src.agents import SwarmAgents
+from src.agents.base import NodeUpdate
 from src.state import Status, SwarmState
 
 type SwarmGraph = CompiledStateGraph[SwarmState, None, SwarmState, SwarmState]
@@ -62,3 +63,19 @@ def build_graph(agents: SwarmAgents) -> SwarmGraph:
     builder.add_conditional_edges(CRITIC, route_after_critic, [BACKEND, FRONTEND, END])
 
     return builder.compile(name="swarm-showcase")
+
+
+async def _placeholder_node(state: SwarmState) -> NodeUpdate:  # noqa: ARG001 - name required by _Node
+    raise RuntimeError("topology-only graph: nodes are not executable")
+
+
+def build_topology_graph() -> SwarmGraph:
+    """The production topology with inert nodes, for visualisation without credentials."""
+    return build_graph(
+        SwarmAgents(
+            architect=_placeholder_node,
+            backend=_placeholder_node,
+            frontend=_placeholder_node,
+            critic=_placeholder_node,
+        )
+    )

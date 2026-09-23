@@ -24,7 +24,13 @@ from src.agents import (
     SwarmAgents,
 )
 from src.agents.base import AgentNode, NodeUpdate, extract_code
-from src.graph import build_graph, recursion_limit, route_after_backend, route_after_critic
+from src.graph import (
+    build_graph,
+    build_topology_graph,
+    recursion_limit,
+    route_after_backend,
+    route_after_critic,
+)
 from src.state import (
     ArchitectureSpec,
     CriticVerdict,
@@ -312,3 +318,18 @@ def test_extract_code_prefers_language_block() -> None:
 def test_recursion_limit_covers_worst_case() -> None:
     worst_case_steps = 4 + 3 * MAX_ITERATIONS
     assert recursion_limit(MAX_ITERATIONS) > worst_case_steps
+
+
+def test_topology_graph_mermaid_has_every_edge() -> None:
+    mermaid = build_topology_graph().get_graph().draw_mermaid()
+    for edge in (
+        "__start__ --> architect",
+        "architect --> backend",
+        "backend -.-> frontend",
+        "backend -.-> critic",
+        "frontend --> critic",
+        "critic -.-> backend",
+        "critic -.-> frontend",
+        "critic -.-> __end__",
+    ):
+        assert edge in mermaid
