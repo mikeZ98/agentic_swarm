@@ -1,0 +1,20 @@
+# Environments & secrets
+.venv/
+.env
+.direnv/
+
+# All project-local caches (uv, HF, torch, XDG, ruff, mypy, pytest)
+.cache/
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+__pycache__/
+*.py[cod]
+
+# Generated swarm artefacts
+output/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
