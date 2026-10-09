@@ -37,7 +37,7 @@ log = logging.getLogger("swarm")
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(prog="swarm-showcase", description=__doc__)
+    parser = argparse.ArgumentParser(prog="agentic_swarm", description=__doc__)
     parser.add_argument("--prompt", default=DEFAULT_PROMPT, help="Product requirement.")
     parser.add_argument("--output-dir", type=Path, default=Path("output"))
     parser.add_argument("--session-id", default=None, help="Langfuse session id.")
@@ -57,7 +57,7 @@ def _tracing(
 
     attrs = propagate_attributes(
         session_id=session_id,
-        trace_name="swarm-showcase",
+        trace_name="agentic_swarm",
         tags=["swarm", "langgraph"],
         metadata={"max_iterations": str(settings.max_iterations)},
     )
@@ -84,7 +84,7 @@ async def run(prompt: str, settings: Settings, *, session_id: str) -> tuple[Swar
     callbacks, trace_ctx = _tracing(settings, session_id)
     config: RunnableConfig = {
         "callbacks": callbacks,
-        "run_name": "swarm-showcase",
+        "run_name": "agentic_swarm",
         "recursion_limit": recursion_limit(settings.max_iterations),
         "metadata": {"langfuse_session_id": session_id},
     }

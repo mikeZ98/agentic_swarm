@@ -62,7 +62,7 @@ def build_graph(agents: SwarmAgents) -> SwarmGraph:
     builder.add_edge(FRONTEND, CRITIC)
     builder.add_conditional_edges(CRITIC, route_after_critic, [BACKEND, FRONTEND, END])
 
-    return builder.compile(name="swarm-showcase")
+    return builder.compile(name="agentic_swarm")
 
 
 async def _placeholder_node(state: SwarmState) -> NodeUpdate:  # noqa: ARG001 - name required by _Node
