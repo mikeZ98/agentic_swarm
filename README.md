@@ -1,4 +1,4 @@
-# swarm-showcase
+# agentic_swarm
 
 A hierarchical multi-agent system that turns a product requirement into a **typed FastAPI
 backend** and a **matching HTML/Tailwind frontend**. An adversarial critic from a *different
@@ -162,7 +162,7 @@ Tracing turns on automatically when `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_K
 
 - Uses `langfuse.langchain.CallbackHandler`, the Langfuse v3+/v4 location of the handler
   formerly at `langfuse.callback.CallbackHandler`.
-- A single trace, `swarm-showcase`, per run. It is grouped under a session id, set with
+- A single trace, `agentic_swarm`, per run. It is grouped under a session id, set with
   `--session-id` or generated.
 - Each graph node shows up as a span (`architect`, `backend`, `frontend`, `critic`) with nested
   generations (`architect.spec`, `backend.implement`, …). Each generation carries **token usage**

@@ -1,5 +1,5 @@
 [project]
-name = "swarm-showcase"
+name = "agentic_swarm"
 version = "0.1.0"
 description = "Hierarchical multi-agent code-generation swarm with an adversarial critic loop (LangGraph + Pydantic v2 + Langfuse)."
 readme = "README.md"

@@ -1,1 +1,1 @@
-"""swarm-showcase: hierarchical multi-agent orchestration."""
+"""agentic_swarm: hierarchical multi-agent orchestration."""
