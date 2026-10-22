@@ -46,7 +46,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101", "PLR2004", "ARG001", "ANN401"]
+"tests/**" = ["S101", "PLR2004", "ARG001", "ANN401", "S603", "S607"]  # tests drive real git
 
 [tool.ruff.format]
 quote-style = "double"
