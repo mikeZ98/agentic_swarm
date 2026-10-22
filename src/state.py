@@ -120,6 +120,40 @@ class StaticAnalysisReport(Contract):
         return tuple(finding for run in self.runs for finding in run.findings)
 
 
+class GuardrailReport(Contract):
+    """The critic's deterministic gate: tool verdicts that no LLM score can override."""
+
+    static_analysis: StaticAnalysisReport
+    execution: ExecutionResult | None = Field(
+        description="The backend's sandbox smoke run; missing counts as a failure."
+    )
+
+    @property
+    def passed(self) -> bool:
+        return (
+            self.static_analysis.passed and self.execution is not None and self.execution.succeeded
+        )
+
+    @property
+    def failures(self) -> tuple[str, ...]:
+        """One actionable line per blocking problem, for the engineers' revision prompt."""
+        lines = [
+            f"[{f.tool} {f.rule}] line {f.line}: {f.message}" for f in self.static_analysis.findings
+        ]
+        lines += [
+            f"[{run.tool}] exited {run.exit_code}{' (timed out)' if run.timed_out else ''}"
+            for run in self.static_analysis.runs
+            if not run.passed and not run.findings
+        ]
+        if self.execution is None:
+            lines.append("[sandbox] the backend module was never executed")
+        elif not self.execution.succeeded:
+            status = "timed out" if self.execution.timed_out else f"exit {self.execution.exit_code}"
+            detail = self.execution.stderr.strip()[-800:] or "no stderr"
+            lines.append(f"[sandbox] importing the backend module failed ({status}): {detail}")
+        return tuple(lines)
+
+
 # --------------------------------------------------------------------------- critic output
 
 
@@ -141,9 +175,13 @@ class CriticVerdict(EvaluationResult):
 
 
 class CriticReport(CriticVerdict):
-    """The gated verdict recorded in state: `is_accepted` is the *final* decision."""
+    """The gated verdict recorded in state: `is_accepted` is the *final* decision.
+
+    `vulnerabilities` lists the guardrail failures first, then the LLM's findings.
+    """
 
     reviewed_iteration: int = Field(ge=0)
+    guardrail: GuardrailReport
 
 
 #: Schemas an LLM must fill. They carry no defaults, so OpenAI strict decoding accepts them.

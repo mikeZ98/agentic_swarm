@@ -38,15 +38,17 @@ from src.state import (
     DataModelSpec,
     EndpointSpec,
     FieldSpec,
+    GuardrailReport,
     NodeUpdate,
     RevisionTarget,
     Status,
     SwarmState,
 )
-from tests.fakes import FakeCodeTools
+from tests.fakes import FakeCodeTools, clean_report, execution
 
 MAX_ITERATIONS = 3
 THRESHOLD = 80
+PASSING_GUARDRAIL = GuardrailReport(static_analysis=clean_report(), execution=execution())
 
 SPEC = ArchitectureSpec(
     title="URL shortener",
@@ -94,6 +96,7 @@ class Recorder:
         self._verdicts: Iterator[CriticVerdict] = iter(verdicts)
         self._critic = CriticAgent(
             RunnableLambda(self._never),
+            FakeCodeTools(),
             max_iterations=MAX_ITERATIONS,
             acceptance_threshold=THRESHOLD,
         )
@@ -111,7 +114,7 @@ class Recorder:
 
     async def _critic_node(self, state: SwarmState) -> NodeUpdate:
         self.calls.append("critic")
-        return self._critic.decide(state, next(self._verdicts))
+        return self._critic.decide(state, next(self._verdicts), PASSING_GUARDRAIL)
 
     def agents(self) -> SwarmAgents:
         return SwarmAgents(
@@ -170,41 +173,46 @@ def test_route_after_backend(target: RevisionTarget | None, expected: str) -> No
 def _critic() -> CriticAgent:
     return CriticAgent(
         RunnableLambda(Recorder._never),
+        FakeCodeTools(),
         max_iterations=MAX_ITERATIONS,
         acceptance_threshold=THRESHOLD,
     )
 
 
 def test_critic_accepts_and_clears_target() -> None:
-    update = _critic().decide(SwarmState(user_prompt="x"), verdict(accepted=True))
+    update = _critic().decide(
+        SwarmState(user_prompt="x"), verdict(accepted=True), PASSING_GUARDRAIL
+    )
     assert update["status"] == Status.ACCEPTED
     assert update["revision_target"] is None
     assert "iteration" not in update
 
 
 def test_critic_score_gate_overrides_llm_acceptance() -> None:
-    update = _critic().decide(SwarmState(user_prompt="x"), verdict(accepted=True, score=79))
+    update = _critic().decide(
+        SwarmState(user_prompt="x"), verdict(accepted=True, score=79), PASSING_GUARDRAIL
+    )
     assert update["status"] == Status.REVISING
     assert update["eval_report"].is_accepted is False
 
 
 def test_critic_rejection_increments_iteration() -> None:
     state = SwarmState(user_prompt="x", iteration=1)
-    update = _critic().decide(state, verdict(accepted=False, owner="frontend"))
+    update = _critic().decide(state, verdict(accepted=False, owner="frontend"), PASSING_GUARDRAIL)
     assert update["iteration"] == 2
     assert update["revision_target"] == "frontend"
 
 
 def test_critic_stops_at_iteration_limit() -> None:
     state = SwarmState(user_prompt="x", iteration=MAX_ITERATIONS)
-    update = _critic().decide(state, verdict(accepted=False))
+    update = _critic().decide(state, verdict(accepted=False), PASSING_GUARDRAIL)
     assert update["status"] == Status.MAX_ITERATIONS_REACHED
     assert "iteration" not in update
 
 
 def test_eval_report_records_the_reviewed_iteration_and_round_trips() -> None:
     state = SwarmState(user_prompt="x", iteration=2)
-    report = _critic().decide(state, verdict(accepted=False))["eval_report"]
+    report = _critic().decide(state, verdict(accepted=False), PASSING_GUARDRAIL)["eval_report"]
     assert report.reviewed_iteration == 2
     assert CriticReport.model_validate_json(report.model_dump_json()) == report
 
@@ -291,6 +299,7 @@ async def test_real_agents_propagate_feedback_through_the_loop() -> None:
         frontend=FrontendAgent(RunnableLambda(frontend_llm)),
         critic=CriticAgent(
             RunnableLambda(critic_llm),
+            sandbox,
             max_iterations=MAX_ITERATIONS,
             acceptance_threshold=THRESHOLD,
         ),

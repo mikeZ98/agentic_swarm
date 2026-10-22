@@ -50,8 +50,12 @@ contracts, **Langfuse** tracing.
 1. **The critic owns loop control.** `CriticAgent.decide` is a pure function of (state, verdict);
    routers only read `status` / `revision_target`. The iteration budget is `SWARM_MAX_ITERATIONS`
    and `recursion_limit()` must always cover the worst case.
-2. **Acceptance is deterministic.** An LLM `is_accepted=true` below `SWARM_ACCEPTANCE_THRESHOLD`
-   is a rejection.
+2. **Acceptance is fail-closed.** The critic first runs its guardrail — ruff + bandit on the
+   backend (`static_analysis` via MCP) and the backend's sandboxed import (`backend_execution`).
+   Accepted only if the guardrail passes AND the LLM accepts at or above
+   `SWARM_ACCEPTANCE_THRESHOLD`. Any non-zero tool exit, timeout, unparseable report or missing
+   execution forces a revision (routed to the backend, `frontend` escalates to `both`) with the
+   `[tool]` findings first in `vulnerabilities`. No LLM score can override the guardrail.
 3. **Secrets stay secret.** Keys are `SecretStr`; a role fails fast only when *its* provider key
    is missing.
 4. **Strict contracts at every boundary.** `SwarmState`, every agent payload and every tool response

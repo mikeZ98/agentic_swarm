@@ -47,6 +47,7 @@ def build_agents(settings: Settings, tools: CodeTools) -> SwarmAgents:
         frontend=FrontendAgent(build_engineer_model(settings.frontend, settings, role="frontend")),
         critic=CriticAgent(
             build_structured_model(settings.critic, settings, CriticVerdict, role="critic"),
+            tools,
             max_iterations=settings.max_iterations,
             acceptance_threshold=settings.acceptance_threshold,
         ),

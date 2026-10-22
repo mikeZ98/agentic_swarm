@@ -22,9 +22,11 @@ from src.state import (
     CriticVerdict,
     EvaluationResult,
     FieldSpec,
+    GuardrailReport,
     Status,
     SwarmState,
 )
+from tests.fakes import clean_report, execution
 
 
 def _schemas(module: Any) -> list[type[BaseModel]]:
@@ -93,7 +95,8 @@ def test_evaluation_score_bounds_are_enforced() -> None:
 
 def test_report_extends_the_verdict_with_the_reviewed_iteration() -> None:
     verdict = CriticVerdict.model_validate_json(json.dumps(VERDICT_JSON))
-    report = CriticReport(**verdict.model_dump(), reviewed_iteration=0)
+    guardrail = GuardrailReport(static_analysis=clean_report(), execution=execution())
+    report = CriticReport(**verdict.model_dump(), reviewed_iteration=0, guardrail=guardrail)
 
     assert report.vulnerabilities == ("XSS in stats table",)
     assert SwarmState(user_prompt="x", eval_report=report, status=Status.REVISING).eval_report

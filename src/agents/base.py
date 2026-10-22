@@ -54,8 +54,14 @@ def render_spec(spec: ArchitectureSpec | None) -> str:
 def render_feedback(report: CriticReport) -> str:
     vulns = "\n".join(f"- {v}" for v in report.vulnerabilities) or "- (none)"
     perf = "\n".join(f"- {p}" for p in report.performance_notes) or "- (none)"
+    gate = (
+        "Deterministic gate (ruff / bandit / sandboxed import): FAILED — the [tool] findings "
+        "below block acceptance regardless of the score.\n"
+        if not report.guardrail.passed
+        else ""
+    )
     return (
-        f"Previous review score: {report.score}/100 — REJECTED.\n"
+        f"Previous review score: {report.score}/100 — REJECTED.\n{gate}"
         f"Vulnerabilities you MUST fix:\n{vulns}\n"
         f"Performance notes to address:\n{perf}"
     )
