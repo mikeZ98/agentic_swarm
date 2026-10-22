@@ -1,4 +1,8 @@
-"""Node 2 — Backend Engineer: typed FastAPI/asyncio implementation of the spec."""
+"""Node 2 — Backend Engineer: typed FastAPI/asyncio implementation of the spec.
+
+After generating the module it smoke-runs it through the sandbox MCP tools (never on the
+host) and records the `ExecutionResult`, so the critic judges code that actually imports.
+"""
 
 from __future__ import annotations
 
@@ -6,6 +10,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 
 from src.agents.base import extract_code, render_feedback, render_spec
 from src.agents.llm import ChatRunnable
+from src.sandbox import CodeTools
 from src.state import NodeUpdate, Status, SwarmState
 
 SYSTEM_PROMPT = """\
@@ -22,8 +27,9 @@ Respond with a single ```python fenced block and nothing else.
 class BackendAgent:
     name = "backend"
 
-    def __init__(self, llm: ChatRunnable) -> None:
+    def __init__(self, llm: ChatRunnable, tools: CodeTools) -> None:
         self._llm = llm
+        self._tools = tools
 
     def _messages(self, state: SwarmState) -> list[BaseMessage]:
         parts = [f"Specification:\n```json\n{render_spec(state.architecture_spec)}\n```"]
@@ -40,4 +46,9 @@ class BackendAgent:
             config={"run_name": "backend.implement", "tags": ["backend"]},
         )
         code = extract_code(reply.text, preferred_langs=("python", "py"))
-        return {"backend_code": code, "status": Status.BACKEND_READY}
+        execution = await self._tools.execute_python(code)
+        return {
+            "backend_code": code,
+            "backend_execution": execution,
+            "status": Status.BACKEND_READY,
+        }

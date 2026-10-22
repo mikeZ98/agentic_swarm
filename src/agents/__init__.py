@@ -11,6 +11,7 @@ from src.agents.critic import CriticAgent
 from src.agents.frontend import FrontendAgent
 from src.agents.llm import build_engineer_model, build_structured_model
 from src.config import Settings
+from src.sandbox import CodeTools
 from src.state import ArchitectureSpec, CriticVerdict
 
 __all__ = [
@@ -34,12 +35,15 @@ class SwarmAgents:
     critic: AgentNode
 
 
-def build_agents(settings: Settings) -> SwarmAgents:
+def build_agents(settings: Settings, tools: CodeTools) -> SwarmAgents:
+    """Production wiring; `tools` is the MCP client of the sandbox server."""
     return SwarmAgents(
         architect=ArchitectAgent(
             build_structured_model(settings.architect, settings, ArchitectureSpec, role="architect")
         ),
-        backend=BackendAgent(build_engineer_model(settings.backend, settings, role="backend")),
+        backend=BackendAgent(
+            build_engineer_model(settings.backend, settings, role="backend"), tools
+        ),
         frontend=FrontendAgent(build_engineer_model(settings.frontend, settings, role="frontend")),
         critic=CriticAgent(
             build_structured_model(settings.critic, settings, CriticVerdict, role="critic"),

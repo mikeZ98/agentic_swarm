@@ -39,6 +39,10 @@ contracts, **Langfuse** tracing.
 - `src/graph.py` — topology + pure routing functions (`route_after_backend`, `route_after_critic`).
 - `src/agents/` — one module per node; `llm.py` is the provider factory. Nodes receive the
   validated state and return a partial update; they never mutate state.
+- `src/sandbox/` — code execution. `server.py` is an MCP server (`execute_python`,
+  `static_analysis`) and the **only** process that talks to Docker; `docker.py` builds the
+  locked-down `docker run`; `client.py` (`McpCodeTools`) is what agents hold, typed as the
+  `CodeTools` protocol.
 - `src/main.py` — CLI entrypoint; writes artefacts to `output/` (git-ignored).
 
 ## Invariants (each is covered by tests)
@@ -56,8 +60,14 @@ contracts, **Langfuse** tracing.
    (`build_structured_model`) and validated by `parse_structured` in strict JSON mode — never pass
    the class to `with_structured_output` (provider parsers validate in Python mode and reject
    arrays for tuple fields). `tests/test_contracts.py` checks every schema's config by reflection.
-5. **The suite is hermetic.** Tests never reach an LLM, Docker or Langfuse — nodes and models are
-   scripted fakes.
+5. **Generated code never runs on the host.** Agents execute and analyse code only through the
+   MCP tools; the server runs each call in a fresh container (`--network none`, `--read-only`,
+   `--cap-drop ALL`, `no-new-privileges`, uid 65534, pid/memory/CPU/time limits, `--pull never`),
+   code streamed over stdin. Don't add volumes, ports or capabilities to `container_argv`.
+   Infrastructure faults (`SandboxError`) abort the run; they are never scored as code defects.
+   The stdio server inherits no provider or tracing secrets (`server_environment`).
+6. **The suite is hermetic.** Tests never reach an LLM, Docker or Langfuse — nodes and models are
+   scripted fakes; MCP runs in-process (`mcp.Client(server)`) against `tests/fakes.FakeCodeTools`.
 
 ## Environment (Kingston SSD only)
 

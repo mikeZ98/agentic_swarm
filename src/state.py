@@ -67,6 +67,59 @@ class ArchitectureSpec(Contract):
     non_functional_requirements: tuple[str, ...]
 
 
+# --------------------------------------------------------------------------- sandbox tool responses
+
+type AnalysisTool = Literal["ruff", "bandit"]
+
+
+class ExecutionResult(Contract):
+    """Outcome of running a snippet inside the sandbox container (`execute_python`)."""
+
+    exit_code: int
+    stdout: str
+    stderr: str
+    timed_out: bool
+    duration_s: float = Field(ge=0)
+
+    @property
+    def succeeded(self) -> bool:
+        return self.exit_code == 0 and not self.timed_out
+
+
+class StaticFinding(Contract):
+    tool: AnalysisTool
+    rule: str = Field(min_length=1, description="e.g. `F821` (ruff) or `B602` (bandit)")
+    line: int = Field(ge=0, description="1-based; 0 when the finding is not tied to a line")
+    message: str
+
+
+class ToolRun(Contract):
+    """One analyser's verdict. Fail-closed: anything but a clean exit with no findings fails."""
+
+    tool: AnalysisTool
+    exit_code: int
+    timed_out: bool
+    findings: tuple[StaticFinding, ...]
+
+    @property
+    def passed(self) -> bool:
+        return self.exit_code == 0 and not self.timed_out and not self.findings
+
+
+class StaticAnalysisReport(Contract):
+    """Result of the `static_analysis` tool: every analyser must pass."""
+
+    runs: tuple[ToolRun, ...] = Field(min_length=1)
+
+    @property
+    def passed(self) -> bool:
+        return all(run.passed for run in self.runs)
+
+    @property
+    def findings(self) -> tuple[StaticFinding, ...]:
+        return tuple(finding for run in self.runs for finding in run.findings)
+
+
 # --------------------------------------------------------------------------- critic output
 
 
@@ -110,6 +163,7 @@ class SwarmState(Contract):
     user_prompt: str = Field(min_length=1)
     architecture_spec: ArchitectureSpec | None = None
     backend_code: str = ""
+    backend_execution: ExecutionResult | None = None
     frontend_code: str = ""
     eval_report: CriticReport | None = None
     iteration: int = Field(default=0, ge=0)
@@ -124,6 +178,7 @@ class NodeUpdate(TypedDict, total=False):
 
     architecture_spec: ArchitectureSpec
     backend_code: str
+    backend_execution: ExecutionResult
     frontend_code: str
     eval_report: CriticReport
     iteration: int

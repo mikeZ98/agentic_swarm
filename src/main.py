@@ -22,6 +22,7 @@ from langchain_core.runnables import RunnableConfig
 from src.agents import build_agents
 from src.config import Settings, get_settings
 from src.graph import build_graph, recursion_limit
+from src.sandbox import CodeTools, open_code_tools
 from src.state import SwarmState
 
 DEFAULT_PROMPT = (
@@ -81,7 +82,14 @@ def _write_artifacts(state: SwarmState, out: Path) -> None:
 
 
 async def run(prompt: str, settings: Settings, *, session_id: str) -> tuple[SwarmState, float]:
-    graph = build_graph(build_agents(settings))
+    async with open_code_tools(settings.mcp) as tools:
+        return await _run_graph(prompt, settings, tools, session_id=session_id)
+
+
+async def _run_graph(
+    prompt: str, settings: Settings, tools: CodeTools, *, session_id: str
+) -> tuple[SwarmState, float]:
+    graph = build_graph(build_agents(settings, tools))
     callbacks, trace_ctx = _tracing(settings, session_id)
     config: RunnableConfig = {
         "callbacks": callbacks,
@@ -109,7 +117,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         state, elapsed = asyncio.run(run(args.prompt, settings, session_id=session_id))
-    except RuntimeError as exc:  # missing credentials etc.
+    except RuntimeError as exc:  # missing credentials, unreachable sandbox (SandboxError)
         log.error("%s", exc)  # noqa: TRY400 - user-facing config error, no traceback
         return 2
 

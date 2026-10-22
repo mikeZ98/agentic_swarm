@@ -43,6 +43,7 @@ from src.state import (
     Status,
     SwarmState,
 )
+from tests.fakes import FakeCodeTools
 
 MAX_ITERATIONS = 3
 THRESHOLD = 80
@@ -283,9 +284,10 @@ async def test_real_agents_propagate_feedback_through_the_loop() -> None:
     def critic_llm(_: LanguageModelInput) -> dict[str, Any]:
         return next(verdicts).model_dump()
 
+    sandbox = FakeCodeTools()
     agents = SwarmAgents(
         architect=ArchitectAgent(RunnableLambda(lambda _: SPEC)),
-        backend=BackendAgent(RunnableLambda(backend_llm)),
+        backend=BackendAgent(RunnableLambda(backend_llm), sandbox),
         frontend=FrontendAgent(RunnableLambda(frontend_llm)),
         critic=CriticAgent(
             RunnableLambda(critic_llm),
@@ -297,6 +299,10 @@ async def test_real_agents_propagate_feedback_through_the_loop() -> None:
 
     assert final.status == Status.ACCEPTED
     assert final.backend_code == "app = 'v2-validated'"
+    # Every generated revision was executed through the sandbox tools, never on the host.
+    assert sandbox.executed == ["app = 'v1'", "app = 'v2-validated'"]
+    assert final.backend_execution is not None
+    assert final.backend_execution.succeeded
     assert final.frontend_code == "<main>v1</main>"
     assert final.architecture_spec == SPEC
     assert "SSRF" not in backend_llm.prompts[0]

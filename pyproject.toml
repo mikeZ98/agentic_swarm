@@ -12,6 +12,7 @@ dependencies = [
     "langchain-openai>=1.6.4",
     "langfuse>=4.15.4",
     "langgraph>=1.2.12",
+    "mcp>=2.3",
     "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",
 ]
@@ -46,7 +47,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101", "PLR2004", "ARG001", "ANN401", "S603", "S607"]  # tests drive real git
+"tests/**" = ["S101", "PLR2004", "ARG001", "ARG002", "ANN401", "S603", "S607"]  # fakes match protocols; tests drive real git
 
 [tool.ruff.format]
 quote-style = "double"
