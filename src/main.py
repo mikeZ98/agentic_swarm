@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import json
 import logging
 import sys
 import time
@@ -73,10 +72,12 @@ def _flush_tracing(settings: Settings) -> None:
 
 def _write_artifacts(state: SwarmState, out: Path) -> None:
     out.mkdir(parents=True, exist_ok=True)
-    (out / "spec.json").write_text(json.dumps(state.architecture_spec, indent=2), "utf-8")
+    if state.architecture_spec is not None:
+        (out / "spec.json").write_text(state.architecture_spec.model_dump_json(indent=2), "utf-8")
     (out / "backend.py").write_text(state.backend_code + "\n", "utf-8")
     (out / "index.html").write_text(state.frontend_code + "\n", "utf-8")
-    (out / "eval_report.json").write_text(json.dumps(state.eval_report, indent=2), "utf-8")
+    if state.eval_report is not None:
+        (out / "eval_report.json").write_text(state.eval_report.model_dump_json(indent=2), "utf-8")
 
 
 async def run(prompt: str, settings: Settings, *, session_id: str) -> tuple[SwarmState, float]:
@@ -114,11 +115,12 @@ def main(argv: list[str] | None = None) -> int:
 
     _write_artifacts(state, args.output_dir)
     report = state.eval_report
-    log.info("status=%s iterations=%d score=%s", state.status, state.iteration, report.get("score"))
-    for vuln in report.get("vulnerabilities", []):
+    score = report.score if report is not None else None
+    log.info("status=%s iterations=%d score=%s", state.status, state.iteration, score)
+    for vuln in report.vulnerabilities if report is not None else ():
         log.info("  open finding: %s", vuln)
     log.info("latency=%.1fs session=%s artefacts=%s", elapsed, session_id, args.output_dir)
-    return 0 if report.get("is_accepted") else 1
+    return 0 if report is not None and report.is_accepted else 1
 
 
 if __name__ == "__main__":

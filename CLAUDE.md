@@ -50,7 +50,13 @@ contracts, **Langfuse** tracing.
    is a rejection.
 3. **Secrets stay secret.** Keys are `SecretStr`; a role fails fast only when *its* provider key
    is missing.
-4. **The suite is hermetic.** Tests never reach an LLM, Docker or Langfuse — nodes and models are
+4. **Strict contracts at every boundary.** `SwarmState`, every agent payload and every tool response
+   derive from `state.Contract`: `extra="forbid"`, `frozen`, `strict`, collections as tuples. Nodes
+   return a typed `NodeUpdate`, never mutate state. LLM replies are requested as a JSON-schema dict
+   (`build_structured_model`) and validated by `parse_structured` in strict JSON mode — never pass
+   the class to `with_structured_output` (provider parsers validate in Python mode and reject
+   arrays for tuple fields). `tests/test_contracts.py` checks every schema's config by reflection.
+5. **The suite is hermetic.** Tests never reach an LLM, Docker or Langfuse — nodes and models are
    scripted fakes.
 
 ## Environment (Kingston SSD only)

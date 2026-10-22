@@ -14,8 +14,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from src.agents import SwarmAgents
-from src.agents.base import NodeUpdate
-from src.state import Status, SwarmState
+from src.state import NodeUpdate, Status, SwarmState
 
 type SwarmGraph = CompiledStateGraph[SwarmState, None, SwarmState, SwarmState]
 

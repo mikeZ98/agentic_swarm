@@ -10,9 +10,8 @@ from langchain_core.language_models import LanguageModelInput
 from langchain_core.runnables import Runnable
 from pydantic import BaseModel
 
-from src.state import SwarmState
+from src.state import ArchitectureSpec, Contract, CriticReport, NodeUpdate, SwarmState
 
-type NodeUpdate = dict[str, Any]
 type StructuredRunnable = Runnable[LanguageModelInput, dict[str, Any] | BaseModel]
 
 _FENCE_RE = re.compile(r"```(?P<lang>[\w+-]*)\s*\n(?P<body>.*?)```", re.DOTALL)
@@ -36,23 +35,27 @@ def extract_code(text: str, *, preferred_langs: tuple[str, ...]) -> str:
     return max(preferred or [body for _, body in blocks], key=len)
 
 
-def coerce[M: BaseModel](raw: dict[str, Any] | BaseModel, model: type[M]) -> M:
-    """Normalise `with_structured_output` results (instance or dict) into `model`."""
+def parse_structured[M: Contract](raw: dict[str, Any] | BaseModel, model: type[M]) -> M:
+    """Validate a structured LLM reply against `model` in strict JSON mode.
+
+    The reply crossed a wire as JSON, so it is re-validated as JSON: arrays map onto tuples,
+    but nothing is coerced (`"90"` is not a score) and unknown keys are rejected.
+    """
     if isinstance(raw, model):
         return raw
-    payload = raw.model_dump() if isinstance(raw, BaseModel) else raw
-    return model.model_validate(payload)
+    payload = raw.model_dump(mode="json") if isinstance(raw, BaseModel) else raw
+    return model.model_validate_json(json.dumps(payload))
 
 
-def render_spec(spec: dict[str, Any]) -> str:
-    return json.dumps(spec, indent=2, ensure_ascii=False)
+def render_spec(spec: ArchitectureSpec | None) -> str:
+    return spec.model_dump_json(indent=2) if spec is not None else "{}"
 
 
-def render_feedback(report: dict[str, Any]) -> str:
-    vulns = "\n".join(f"- {v}" for v in report.get("vulnerabilities", [])) or "- (none)"
-    perf = "\n".join(f"- {p}" for p in report.get("performance_notes", [])) or "- (none)"
+def render_feedback(report: CriticReport) -> str:
+    vulns = "\n".join(f"- {v}" for v in report.vulnerabilities) or "- (none)"
+    perf = "\n".join(f"- {p}" for p in report.performance_notes) or "- (none)"
     return (
-        f"Previous review score: {report.get('score', 'n/a')}/100 — REJECTED.\n"
+        f"Previous review score: {report.score}/100 — REJECTED.\n"
         f"Vulnerabilities you MUST fix:\n{vulns}\n"
         f"Performance notes to address:\n{perf}"
     )

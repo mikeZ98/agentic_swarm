@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from src.agents.base import NodeUpdate, StructuredRunnable, coerce, render_spec
-from src.state import CriticVerdict, Status, SwarmState
+from src.agents.base import StructuredRunnable, parse_structured, render_spec
+from src.state import CriticReport, CriticVerdict, NodeUpdate, Status, SwarmState
 
 SYSTEM_PROMPT = """\
 You are "Pan Maruda", a relentless red-team reviewer. Assume the code is broken until proven
@@ -48,16 +48,17 @@ class CriticAgent:
             [SystemMessage(SYSTEM_PROMPT), HumanMessage(review_input)],
             config={"run_name": "critic.review", "tags": ["critic"]},
         )
-        verdict = coerce(raw, CriticVerdict)
+        verdict = parse_structured(raw, CriticVerdict)
         return self.decide(state, verdict)
 
     def decide(self, state: SwarmState, verdict: CriticVerdict) -> NodeUpdate:
         """Pure loop-control policy: gate the verdict and compute the next status."""
         accepted = verdict.is_accepted and verdict.score >= self._threshold
-        report = verdict.model_dump(mode="json") | {
-            "is_accepted": accepted,
-            "reviewed_iteration": state.iteration,
-        }
+        report = CriticReport(
+            **verdict.model_dump(exclude={"is_accepted"}),
+            is_accepted=accepted,
+            reviewed_iteration=state.iteration,
+        )
         if accepted:
             return {"eval_report": report, "status": Status.ACCEPTED, "revision_target": None}
         if state.iteration < self._max_iterations:

@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import StrEnum
 from functools import lru_cache
 
-from pydantic import BaseModel, Field, SecretStr
+from pydantic import BaseModel, ConfigDict, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,6 +18,8 @@ class Provider(StrEnum):
 
 class ModelConfig(BaseModel):
     """Provider + model id for a single agent role."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
     provider: Provider
     model: str

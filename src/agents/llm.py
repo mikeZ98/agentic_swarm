@@ -6,6 +6,8 @@ token usage and latency uniformly regardless of vendor.
 
 from __future__ import annotations
 
+from typing import Any
+
 from langchain_anthropic import ChatAnthropic
 from langchain_core.language_models import BaseChatModel, LanguageModelInput
 from langchain_core.messages import BaseMessage
@@ -14,7 +16,9 @@ from langchain_ollama import ChatOllama
 from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
 
+from src.agents.base import StructuredRunnable
 from src.config import ModelConfig, Provider, Settings
+from src.state import Contract
 
 type ChatRunnable = Runnable[LanguageModelInput, BaseMessage]
 
@@ -56,6 +60,23 @@ def build_chat_model(cfg: ModelConfig, settings: Settings, *, role: str) -> Base
                 base_url=settings.ollama_base_url,
                 temperature=settings.temperature,
             )
+
+
+def build_structured_model(
+    cfg: ModelConfig, settings: Settings, schema: type[Contract], *, role: str
+) -> StructuredRunnable:
+    """Structured-output model that returns a plain dict for `parse_structured` to validate.
+
+    The JSON schema is passed instead of the class: given a class, the provider parsers
+    validate in Python mode, where strict contracts reject JSON arrays for tuple fields.
+    """
+    json_schema = schema.model_json_schema()
+    response_format: dict[str, Any] = json_schema
+    if cfg.provider in {Provider.OPENAI, Provider.OPENROUTER}:
+        # Constrained decoding against the closed schema (see `LLM_OUTPUT_SCHEMAS`).
+        response_format = {"name": schema.__name__, "schema": json_schema, "strict": True}
+    llm = build_chat_model(cfg, settings, role=role)
+    return llm.with_structured_output(response_format, method="json_schema")
 
 
 def build_engineer_model(cfg: ModelConfig, settings: Settings, *, role: str) -> ChatRunnable:

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 
-from src.agents.base import NodeUpdate, extract_code, render_feedback, render_spec
+from src.agents.base import extract_code, render_feedback, render_spec
 from src.agents.llm import ChatRunnable
-from src.state import Status, SwarmState
+from src.state import NodeUpdate, Status, SwarmState
 
 SYSTEM_PROMPT = """\
 You are a senior Python backend engineer.
@@ -27,7 +27,7 @@ class BackendAgent:
 
     def _messages(self, state: SwarmState) -> list[BaseMessage]:
         parts = [f"Specification:\n```json\n{render_spec(state.architecture_spec)}\n```"]
-        if state.backend_code and state.eval_report:
+        if state.backend_code and state.eval_report is not None:
             parts.append(
                 f"Revision #{state.iteration}. Your previous implementation:\n"
                 f"```python\n{state.backend_code}\n```\n{render_feedback(state.eval_report)}"

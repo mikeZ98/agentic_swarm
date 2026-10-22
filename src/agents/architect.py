@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from src.agents.base import NodeUpdate, StructuredRunnable, coerce
-from src.state import ArchitectureSpec, Status, SwarmState
+from src.agents.base import StructuredRunnable, parse_structured
+from src.state import ArchitectureSpec, NodeUpdate, Status, SwarmState
 
 SYSTEM_PROMPT = """\
 You are the principal architect of a two-engineer delivery squad.
@@ -32,5 +32,5 @@ class ArchitectAgent:
             [SystemMessage(SYSTEM_PROMPT), HumanMessage(state.user_prompt)],
             config={"run_name": "architect.spec", "tags": ["architect"]},
         )
-        spec = coerce(raw, ArchitectureSpec)
-        return {"architecture_spec": spec.model_dump(mode="json"), "status": Status.SPEC_READY}
+        spec = parse_structured(raw, ArchitectureSpec)
+        return {"architecture_spec": spec, "status": Status.SPEC_READY}

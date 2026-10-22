@@ -23,7 +23,7 @@ from src.agents import (
     FrontendAgent,
     SwarmAgents,
 )
-from src.agents.base import AgentNode, NodeUpdate, extract_code
+from src.agents.base import AgentNode, extract_code
 from src.graph import (
     build_graph,
     build_topology_graph,
@@ -33,11 +33,12 @@ from src.graph import (
 )
 from src.state import (
     ArchitectureSpec,
+    CriticReport,
     CriticVerdict,
     DataModelSpec,
     EndpointSpec,
-    EvaluationResult,
     FieldSpec,
+    NodeUpdate,
     RevisionTarget,
     Status,
     SwarmState,
@@ -49,33 +50,33 @@ THRESHOLD = 80
 SPEC = ArchitectureSpec(
     title="URL shortener",
     summary="Shorten URLs with a token-bucket limit.",
-    data_models=[
+    data_models=(
         DataModelSpec(
             name="ShortenRequest",
-            fields=[FieldSpec(name="url", type="HttpUrl", constraints="http(s) only")],
+            fields=(FieldSpec(name="url", type="HttpUrl", constraints="http(s) only"),),
             description="Shorten request",
-        )
-    ],
-    endpoints=[
+        ),
+    ),
+    endpoints=(
         EndpointSpec(
             method="POST",
             path="/shorten",
             description="Create short code",
             request_model="ShortenRequest",
             response_model=None,
-            status_codes=[201, 422, 429],
-        )
-    ],
-    frontend_layout=["form", "result", "stats"],
-    non_functional_requirements=["token bucket 10/min"],
+            status_codes=(201, 422, 429),
+        ),
+    ),
+    frontend_layout=("form", "result", "stats"),
+    non_functional_requirements=("token bucket 10/min",),
 )
 
 
 def verdict(*, accepted: bool, score: int = 90, owner: RevisionTarget = "backend") -> CriticVerdict:
     return CriticVerdict(
         is_accepted=accepted,
-        vulnerabilities=[] if accepted else ["SSRF: /shorten accepts file:// URLs"],
-        performance_notes=["O(1) lookups"],
+        vulnerabilities=() if accepted else ("SSRF: /shorten accepts file:// URLs",),
+        performance_notes=("O(1) lookups",),
         score=score,
         defect_owner=owner,
     )
@@ -114,7 +115,7 @@ class Recorder:
     def agents(self) -> SwarmAgents:
         return SwarmAgents(
             architect=self._node(
-                "architect", {"architecture_spec": SPEC.model_dump(), "status": Status.SPEC_READY}
+                "architect", {"architecture_spec": SPEC, "status": Status.SPEC_READY}
             ),
             backend=self._node(
                 "backend", {"backend_code": "app = 1", "status": Status.BACKEND_READY}
@@ -183,7 +184,7 @@ def test_critic_accepts_and_clears_target() -> None:
 def test_critic_score_gate_overrides_llm_acceptance() -> None:
     update = _critic().decide(SwarmState(user_prompt="x"), verdict(accepted=True, score=79))
     assert update["status"] == Status.REVISING
-    assert update["eval_report"]["is_accepted"] is False
+    assert update["eval_report"].is_accepted is False
 
 
 def test_critic_rejection_increments_iteration() -> None:
@@ -200,14 +201,11 @@ def test_critic_stops_at_iteration_limit() -> None:
     assert "iteration" not in update
 
 
-def test_eval_report_satisfies_contract() -> None:
-    update = _critic().decide(SwarmState(user_prompt="x"), verdict(accepted=False))
-    EvaluationResult.model_validate(update["eval_report"])
-
-
-def test_evaluation_score_bounds_are_enforced() -> None:
-    with pytest.raises(ValueError, match="less than or equal to 100"):
-        EvaluationResult(is_accepted=True, vulnerabilities=[], performance_notes=[], score=101)
+def test_eval_report_records_the_reviewed_iteration_and_round_trips() -> None:
+    state = SwarmState(user_prompt="x", iteration=2)
+    report = _critic().decide(state, verdict(accepted=False))["eval_report"]
+    assert report.reviewed_iteration == 2
+    assert CriticReport.model_validate_json(report.model_dump_json()) == report
 
 
 # --------------------------------------------------------------------------- graph transitions
@@ -300,7 +298,7 @@ async def test_real_agents_propagate_feedback_through_the_loop() -> None:
     assert final.status == Status.ACCEPTED
     assert final.backend_code == "app = 'v2-validated'"
     assert final.frontend_code == "<main>v1</main>"
-    assert final.architecture_spec["title"] == "URL shortener"
+    assert final.architecture_spec == SPEC
     assert "SSRF" not in backend_llm.prompts[0]
     assert "SSRF: /shorten accepts file:// URLs" in backend_llm.prompts[1]
     assert "Revision #1" in backend_llm.prompts[1]
