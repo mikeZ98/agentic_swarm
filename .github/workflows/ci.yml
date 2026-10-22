@@ -1,0 +1,182 @@
+# --------------------------------------------------------------------------- #
+# CI — every gate a commit must pass before it lands on main.
+#   attribution  the git attribution invariant (CLAUDE.md), server-side: unlike
+#                the local hooks it cannot be skipped with --no-verify
+#   quality      lockfile drift, ruff format + lint, mypy --strict, bandit on the
+#                project's own code, pytest with the branch-coverage floor
+#   image        builds the sandbox, sandbox-server and swarm images, probes their
+#                runtime properties, then runs the sandbox integration tests
+#                (isolation, analysers, MCP stdio path) against the real daemon
+# Actions are pinned to full commit SHAs (tag in the trailing comment).
+# --------------------------------------------------------------------------- #
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_VERSION: "0.11.7"
+  PYTHON_VERSION: "3.13"
+
+jobs:
+  attribution:
+    name: Git attribution invariant
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Audit the commits this event introduces
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        # Only the event's own range: history recorded before the guard existed
+        # is out of scope (rewriting published commits is the owner's call).
+        run: |
+          if [ "$EVENT" = "pull_request" ]; then
+            range="$PR_BASE..$PR_HEAD"
+          elif [ -n "$BEFORE" ] && ! printf '%s' "$BEFORE" | grep -qE '^0+$'; then
+            range="$BEFORE..$AFTER"
+          else
+            range="$AFTER^!"
+          fi
+          sh scripts/check_attribution.sh "$range"
+
+  quality:
+    name: Lint, types, security, tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+
+      - name: Lockfile is in sync with pyproject.toml
+        run: uv lock --check
+
+      - name: Install (runtime + dev group)
+        run: uv sync --frozen
+
+      - name: ruff format
+        run: uv run --frozen ruff format --check .
+
+      - name: ruff check
+        run: uv run --frozen ruff check --output-format=github .
+
+      - name: mypy --strict
+        run: uv run --frozen mypy
+
+      - name: bandit (project code)
+        run: uv run --frozen bandit -c pyproject.toml -r src scripts -q
+
+      - name: pytest (branch coverage floor in pyproject.toml)
+        run: uv run --frozen pytest --cov --cov-report=term --durations=10
+
+  image:
+    name: Container images
+    runs-on: ubuntu-24.04
+    needs: quality
+    timeout-minutes: 30
+    env:
+      SANDBOX_IMAGE: agentic-swarm-sandbox:local
+      SWARM_IMAGE: agentic_swarm:ci
+      SERVER_IMAGE: agentic_swarm-sandbox-mcp:ci
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Compose file is valid
+        run: docker compose config --quiet
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build the sandbox image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: docker/sandbox
+          load: true
+          push: false
+          tags: ${{ env.SANDBOX_IMAGE }}
+          cache-from: type=gha,scope=sandbox
+          cache-to: type=gha,scope=sandbox,mode=max
+
+      - name: Build the sandbox-server image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: sandbox-server
+          load: true
+          push: false
+          tags: ${{ env.SERVER_IMAGE }}
+          cache-from: type=gha,scope=app
+          cache-to: type=gha,scope=app,mode=max
+
+      - name: Build the swarm image (default target)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          push: false
+          tags: ${{ env.SWARM_IMAGE }}
+          cache-from: type=gha,scope=app
+
+      - name: Images run unprivileged
+        run: |
+          test "$(docker run --rm --entrypoint id "$SWARM_IMAGE" -u)" = "10001"
+          test "$(docker run --rm --entrypoint id "$SERVER_IMAGE" -u)" = "10001"
+          test "$(docker run --rm "$SANDBOX_IMAGE" id -u)" = "65534"
+
+      - name: Only the sandbox server can drive Docker; no build tooling, code read-only
+        run: |
+          docker run --rm --entrypoint sh "$SWARM_IMAGE" -c '! command -v docker && ! command -v uv'
+          docker run --rm --entrypoint sh "$SERVER_IMAGE" -c 'command -v docker && ! command -v uv'
+          docker run --rm --entrypoint sh "$SWARM_IMAGE" -c '! touch /app/src/probe 2>/dev/null'
+          docker run --rm --entrypoint sh "$SWARM_IMAGE" -c '! touch /app/.venv/probe 2>/dev/null'
+
+      - name: Entrypoints import and the sandbox carries its analysers
+        run: |
+          docker run --rm --entrypoint python "$SWARM_IMAGE" -c "import src.main, src.sandbox"
+          docker run --rm "$SANDBOX_IMAGE" sh -c 'ruff --version && bandit --version | head -1'
+
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+
+      - name: Sandbox integration tests on the real daemon
+        env:
+          SWARM_DOCKER_TESTS: "1"
+          SWARM_SANDBOX__IMAGE: ${{ env.SANDBOX_IMAGE }}
+        run: |
+          uv sync --frozen
+          uv run --frozen pytest -m docker --durations=10
+
+      - name: Image sizes
+        run: |
+          for image in "$SANDBOX_IMAGE" "$SERVER_IMAGE" "$SWARM_IMAGE"; do
+            docker image inspect "$image" --format '{{.Size}}' |
+              awk -v name="$image" '{printf "%s %.0f MB\n", name, $1/1e6}'
+          done

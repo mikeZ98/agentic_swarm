@@ -113,6 +113,14 @@ The gate — run before **every** commit, all must pass:
 uv run ruff format --check . && uv run ruff check . && uv run mypy && uv run pytest
 ```
 
+CI (`.github/workflows/ci.yml`, actions pinned by SHA) also runs `uv lock --check`, bandit on
+`src`/`scripts`, `pytest --cov` (branch coverage, floor 95% in `pyproject.toml`), then builds
+all three images, probes them (non-root uids, docker CLI only in `sandbox-server`, read-only
+code) and runs `pytest -m docker` — `tests/test_sandbox_integration.py`, which proves network,
+filesystem, uid and capability isolation on a real daemon. Those tests skip unless
+`SWARM_DOCKER_TESTS=1`; write new ones there when a change touches `container_argv` or the
+sandbox image.
+
 ## Commit discipline
 
 Conventional Commits (`feat`, `fix`, `refactor`, `test`, `chore`, `docs`, `ci`, `build`), one
