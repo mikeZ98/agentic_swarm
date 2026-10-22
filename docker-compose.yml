@@ -1,0 +1,134 @@
+# --------------------------------------------------------------------------- #
+# agentic_swarm — local stack.
+#   docker compose up -d --wait sandbox-mcp          # dind + sandbox image + MCP server
+#   docker compose run --rm swarm --prompt "..."     # one swarm run; artefacts -> ./output
+#   docker compose down -v                           # stop and drop dind's image store
+#
+# Trust boundaries:
+#   swarm        the agents. No docker CLI, no socket, not on the `sandbox`
+#                network: generated code can only be run via sandbox-mcp's tools.
+#   sandbox-mcp  MCP server (streamable HTTP, :8765, never published). The only
+#                service that talks to a Docker daemon — and that daemon is dind,
+#                not the host's: the host socket is mounted nowhere.
+#   dind         private Docker daemon for sandbox containers. `privileged` is
+#                inherent to docker-in-docker; it is confined to its own network,
+#                publishes no port, and each sandbox it starts still runs with
+#                --network none, --read-only, --cap-drop ALL, uid 65534.
+#   sandbox-image  one-shot: builds docker/sandbox into dind's image store
+#                (the sandbox runs with --pull never, so it must exist first).
+#
+# Storage: ./output is bind-mounted. dind's /var/lib/docker is an anonymous
+# volume (overlayfs cannot live on a macOS bind mount); `down -v` removes it.
+# --------------------------------------------------------------------------- #
+name: agentic_swarm
+
+x-hardening: &hardening
+  read_only: true
+  tmpfs:
+    - /tmp
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
+services:
+  dind:
+    image: docker:29.2.1-dind
+    container_name: agentic_swarm-dind
+    privileged: true
+    restart: unless-stopped
+    # Plain TCP is acceptable only because 2375 is reachable solely on the
+    # private `sandbox` network (no `ports:`).
+    environment:
+      DOCKER_TLS_CERTDIR: ""
+    command: ["--tls=false"]
+    networks:
+      - sandbox
+    healthcheck:
+      test: ["CMD", "docker", "info", "--format", "{{.ServerVersion}}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
+  sandbox-image:
+    image: docker:29.2.1-cli
+    <<: *hardening
+    depends_on:
+      dind:
+        condition: service_healthy
+    environment:
+      DOCKER_HOST: tcp://dind:2375
+      DOCKER_CONFIG: /tmp/.docker
+    command: ["build", "--tag", "agentic-swarm-sandbox:local", "/build"]
+    volumes:
+      - ./docker/sandbox:/build:ro
+    networks:
+      - sandbox
+    restart: "no"
+
+  sandbox-mcp:
+    build:
+      context: .
+      target: sandbox-server
+    image: agentic_swarm-sandbox-mcp:local
+    container_name: agentic_swarm-sandbox-mcp
+    <<: *hardening
+    restart: unless-stopped
+    depends_on:
+      sandbox-image:
+        condition: service_completed_successfully
+    environment:
+      DOCKER_HOST: tcp://dind:2375
+      SWARM_SANDBOX__IMAGE: agentic-swarm-sandbox:local
+    expose:
+      - "8765"
+    networks:
+      - sandbox
+      - agents
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  swarm:
+    build:
+      context: .
+      target: swarm
+      args:
+        # Match your host uid on Linux so ./output is writable
+        # (Docker Desktop on macOS maps ownership itself; the default is fine there).
+        APP_UID: ${APP_UID:-10001}
+        APP_GID: ${APP_GID:-10001}
+    image: agentic_swarm:local
+    <<: *hardening
+    depends_on:
+      sandbox-mcp:
+        condition: service_healthy
+    # Provider keys and routing come from .env; the MCP endpoint below always wins.
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      SWARM_MCP__TRANSPORT: streamable-http
+      SWARM_MCP__URL: http://sandbox-mcp:8765/mcp
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL_DOCKER:-http://host.docker.internal:11434}
+    extra_hosts:
+      # Docker Desktop resolves this by itself; Linux engines need the mapping.
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./output:/app/output
+    networks:
+      - agents
+    restart: "no"
+
+networks:
+  # dind + sandbox-mcp only. Not `internal`: dind pulls the base image for the
+  # sandbox build; the sandbox containers themselves get --network none.
+  sandbox: {}
+  # swarm <-> sandbox-mcp, plus egress to the LLM providers.
+  agents: {}

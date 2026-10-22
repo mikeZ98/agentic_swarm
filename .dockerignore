@@ -1,0 +1,10 @@
+# Allow-list: the build context is only what the image needs. Secrets (.env),
+# caches (.cache/), generated output, private notes and git metadata can never
+# leak into a layer. To ship a new file, add it here explicitly.
+# (docker/sandbox/ is built with its own context and is not affected by this file.)
+*
+!pyproject.toml
+!uv.lock
+!src/
+**/__pycache__
+**/*.py[cod]

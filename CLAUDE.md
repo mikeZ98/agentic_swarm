@@ -43,6 +43,11 @@ contracts, **Langfuse** tracing.
   `static_analysis`) and the **only** process that talks to Docker; `docker.py` builds the
   locked-down `docker run`; `client.py` (`McpCodeTools`) is what agents hold, typed as the
   `CodeTools` protocol.
+- `Dockerfile` — targets `swarm` (default; no docker CLI, no daemon access) and
+  `sandbox-server` (the only image with a docker CLI). `docker/sandbox/` — the sandbox image
+  (ruff + bandit + FastAPI stack, `--require-hashes`, uid 65534). `docker-compose.yml` — swarm ⇄
+  sandbox-mcp ⇄ private dind; the host Docker socket is mounted nowhere. `.dockerignore` is an
+  **allow-list**. `tests/test_container_policy.py` pins these boundaries.
 - `src/tracing.py` — Langfuse façade (`start_tracing` / `flush_tracing`).
 - `src/main.py` — CLI entrypoint; writes artefacts to `output/` (git-ignored).
 
@@ -93,7 +98,14 @@ caches and `TMPDIR` under `.cache/` in this project. Nothing may resolve to `$HO
 uv sync                                   # runtime + dev group
 uv run python -m src.main                 # run the swarm (needs provider keys in .env)
 uv run python scripts/export_graph.py     # regenerate docs/swarm_architecture.{mmd,png}
+docker build -t agentic-swarm-sandbox:local docker/sandbox   # sandbox image for local runs
+docker compose up -d --wait sandbox-mcp   # containerised: dind + sandbox image + MCP server
+docker compose run --rm swarm --prompt "..."
 ```
+
+Docker Desktop keeps images on the host disk, outside the SSD: don't build or run images
+locally unless the owner asks — CI builds and probes them. After changing
+`docker/sandbox/requirements.in`, recompile with the command in its header.
 
 The gate — run before **every** commit, all must pass:
 
