@@ -108,6 +108,7 @@ class Settings(BaseSettings):
     langfuse_secret_key: SecretStr | None = Field(
         default=None, validation_alias="LANGFUSE_SECRET_KEY"
     )
+    tracing_flush_timeout_s: float = Field(default=5.0, gt=0, le=60)
 
     @property
     def tracing_enabled(self) -> bool:

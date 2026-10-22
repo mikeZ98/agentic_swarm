@@ -12,11 +12,8 @@ import logging
 import sys
 import time
 import uuid
-from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
-from typing import Any
 
-from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.runnables import RunnableConfig
 
 from src.agents import build_agents
@@ -24,6 +21,7 @@ from src.config import Settings, get_settings
 from src.graph import build_graph, recursion_limit
 from src.sandbox import CodeTools, open_code_tools
 from src.state import SwarmState
+from src.tracing import flush_tracing, start_tracing
 
 DEFAULT_PROMPT = (
     "Build a rate-limited URL shortener microservice. Users submit a long URL and receive a "
@@ -45,32 +43,6 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _tracing(
-    settings: Settings, session_id: str
-) -> tuple[list[BaseCallbackHandler], AbstractContextManager[Any]]:
-    """Return Langfuse callbacks + trace-attribute context, or no-ops when disabled."""
-    if not settings.tracing_enabled:
-        log.info("Langfuse keys not set - tracing disabled.")
-        return [], nullcontext()
-    from langfuse import propagate_attributes  # noqa: PLC0415 - optional at runtime
-    from langfuse.langchain import CallbackHandler  # noqa: PLC0415
-
-    attrs = propagate_attributes(
-        session_id=session_id,
-        trace_name="agentic_swarm",
-        tags=["swarm", "langgraph"],
-        metadata={"max_iterations": str(settings.max_iterations)},
-    )
-    return [CallbackHandler()], attrs
-
-
-def _flush_tracing(settings: Settings) -> None:
-    if settings.tracing_enabled:
-        from langfuse import get_client  # noqa: PLC0415
-
-        get_client().flush()
-
-
 def _write_artifacts(state: SwarmState, out: Path) -> None:
     out.mkdir(parents=True, exist_ok=True)
     if state.architecture_spec is not None:
@@ -90,19 +62,19 @@ async def _run_graph(
     prompt: str, settings: Settings, tools: CodeTools, *, session_id: str
 ) -> tuple[SwarmState, float]:
     graph = build_graph(build_agents(settings, tools))
-    callbacks, trace_ctx = _tracing(settings, session_id)
+    tracing = start_tracing(settings, session_id)
     config: RunnableConfig = {
-        "callbacks": callbacks,
+        "callbacks": tracing.callbacks,
         "run_name": "agentic_swarm",
         "recursion_limit": recursion_limit(settings.max_iterations),
         "metadata": {"langfuse_session_id": session_id},
     }
     started = time.perf_counter()
     try:
-        with trace_ctx:
+        with tracing.context:
             raw = await graph.ainvoke(SwarmState(user_prompt=prompt), config=config)
     finally:
-        _flush_tracing(settings)
+        await flush_tracing(tracing, timeout_s=settings.tracing_flush_timeout_s)
     return SwarmState.model_validate(raw), time.perf_counter() - started
 
 

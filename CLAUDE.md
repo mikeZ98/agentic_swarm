@@ -43,6 +43,7 @@ contracts, **Langfuse** tracing.
   `static_analysis`) and the **only** process that talks to Docker; `docker.py` builds the
   locked-down `docker run`; `client.py` (`McpCodeTools`) is what agents hold, typed as the
   `CodeTools` protocol.
+- `src/tracing.py` — Langfuse façade (`start_tracing` / `flush_tracing`).
 - `src/main.py` — CLI entrypoint; writes artefacts to `output/` (git-ignored).
 
 ## Invariants (each is covered by tests)
@@ -70,7 +71,11 @@ contracts, **Langfuse** tracing.
    code streamed over stdin. Don't add volumes, ports or capabilities to `container_argv`.
    Infrastructure faults (`SandboxError`) abort the run; they are never scored as code defects.
    The stdio server inherits no provider or tracing secrets (`server_environment`).
-6. **The suite is hermetic.** Tests never reach an LLM, Docker or Langfuse — nodes and models are
+6. **Tracing is best effort.** A missing SDK, bad key, failing trace context or unreachable
+   collector degrades to "no trace" with a warning, never a failed run; the final flush is
+   bounded by `SWARM_TRACING_FLUSH_TIMEOUT_S`. Never call the Langfuse SDK outside
+   `src/tracing.py`.
+7. **The suite is hermetic.** Tests never reach an LLM, Docker or Langfuse — nodes and models are
    scripted fakes; MCP runs in-process (`mcp.Client(server)`) against `tests/fakes.FakeCodeTools`.
 
 ## Environment (Kingston SSD only)
