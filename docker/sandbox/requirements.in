@@ -1,0 +1,11 @@
+# Sandbox image contents. Compiled (pinned + hashed) into requirements.txt with:
+#   uv pip compile docker/sandbox/requirements.in --universal --python-version 3.13 \
+#     --generate-hashes --output-file docker/sandbox/requirements.txt
+#
+# Analysers: ruff matches the version in uv.lock so the gate and the repo lint alike.
+ruff==0.16.8
+bandit==1.9.4
+# What generated backends import, so the sandboxed import check can succeed.
+fastapi
+pydantic
+uvicorn
