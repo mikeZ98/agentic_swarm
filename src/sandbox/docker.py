@@ -33,6 +33,10 @@ TIMEOUT_EXIT_CODE = 124
 DOCKER_FAILURE_CODES = frozenset({125, 126, 127})
 #: Unprivileged `nobody:nogroup`, independent of any USER baked into the image.
 SANDBOX_USER = "65534:65534"
+#: The only writable path in the container: a small tmpfs *inside* the sandbox, never a host
+#: directory, so the temp-path warnings (ruff S108 / bandit B108) do not apply.
+SANDBOX_TMPFS = "/tmp:rw,noexec,nosuid,nodev,size=16m"  # noqa: S108  # nosec B108
+SANDBOX_WORKDIR = "/tmp"  # noqa: S108  # nosec B108
 _READ_CHUNK = 64 * 1024
 
 # Executes stdin as module `__sandbox__` and folds every exit status onto 0 / 1, so a
@@ -199,8 +203,8 @@ class DockerSandbox:
             "--pull", "never",
             "--network", "none",
             "--read-only",
-            "--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=16m",  # noqa: S108 - in-container path
-            "--workdir", "/tmp",  # noqa: S108 - in-container path
+            "--tmpfs", SANDBOX_TMPFS,
+            "--workdir", SANDBOX_WORKDIR,
             "--cap-drop", "ALL",
             "--security-opt", "no-new-privileges",
             "--user", SANDBOX_USER,
