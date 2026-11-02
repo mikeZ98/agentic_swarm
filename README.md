@@ -402,7 +402,7 @@ SWARM_DOCKER_TESTS=1 uv run --frozen pytest -m docker
 ```
 
 CI (`.github/workflows/ci.yml`, actions pinned by SHA) runs three jobs on every push and pull
-request: the git attribution audit, the gates above plus `uv lock --check`, and an image job
+request: the git identity audit, the gates above plus `uv lock --check`, and an image job
 that builds all three images, probes them (non-root, Docker CLI only in `sandbox-server`,
 read-only code) and runs the Docker integration tests.
 
