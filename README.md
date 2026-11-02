@@ -13,7 +13,8 @@ imports cleanly; any non-zero tool exit forces another revision, whatever the mo
 
 Built on **LangGraph** (`StateGraph`), strict **Pydantic v2** contracts, the **MCP** Python
 SDK and **Langfuse** tracing. It passes `ruff check`, `ruff format`, `mypy --strict` and
-bandit, and the test suite runs fully offline at 99% branch coverage.
+bandit, and its 206 tests run fully offline at 99% branch coverage (9 sandbox tests need Docker
+and are skipped unless `SWARM_DOCKER_TESTS=1`).
 
 ---
 
