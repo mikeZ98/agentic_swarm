@@ -1,5 +1,11 @@
 # agentic_swarm
 
+[![CI](https://github.com/mikeZ98/agentic_swarm/actions/workflows/ci.yml/badge.svg)](https://github.com/mikeZ98/agentic_swarm/actions/workflows/ci.yml)
+[![Python 3.13+](https://img.shields.io/badge/python-3.13%2B-blue.svg)](pyproject.toml)
+[![Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](pyproject.toml)
+[![mypy strict](https://img.shields.io/badge/types-mypy%20strict-blue.svg)](pyproject.toml)
+[![Committer mikeZ98](https://img.shields.io/badge/committer-mikeZ98-lightgrey.svg)](https://github.com/mikeZ98/agentic_swarm/commits/main)
+
 A hierarchical multi-agent system that turns a product requirement into a **typed FastAPI
 backend** and a **matching HTML/Tailwind frontend**. An adversarial critic from a *different
 model family* reviews the output, and a deterministic self-correction loop sends its feedback
